@@ -1,0 +1,712 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Теорема Помпею — Интерактивная визуализация</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:ital,wght@0,300;0,400;0,600;1,300;1,400&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:        #0d0f14;
+    --surface:   #131720;
+    --surface2:  #1a1f2e;
+    --border:    rgba(255,255,255,0.07);
+    --border2:   rgba(255,255,255,0.12);
+    --text:      #c8cdd8;
+    --text-dim:  #6b7385;
+    --text-head: #e8eaf0;
+    --accent:    #4e8fd4;
+    --accent-glow: rgba(78,143,212,0.18);
+    --gold:      #c9a84c;
+    --gold-dim:  rgba(201,168,76,0.12);
+    --green:     #4aad8b;
+    --green-dim: rgba(74,173,139,0.12);
+
+    --pa-color:  #e07660;
+    --pb-color:  #8b82d4;
+    --pc-color:  #c9a84c;
+  }
+
+  html, body {
+    height: 100%;
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Crimson Pro', Georgia, serif;
+    font-size: 17px;
+    line-height: 1.5;
+  }
+
+  body {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
+    min-height: 100vh;
+    padding: 40px 20px 60px;
+  }
+
+  /* Subtle grid background */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(255,255,255,0.02) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,0.02) 1px, transparent 1px);
+    background-size: 48px 48px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .wrapper {
+    position: relative;
+    z-index: 1;
+    width: 100%;
+    max-width: 780px;
+  }
+
+  /* Header */
+  .header {
+    text-align: center;
+    margin-bottom: 36px;
+  }
+
+  .header-tag {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    font-weight: 400;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 10px;
+    opacity: 0.8;
+  }
+
+  h1 {
+    font-size: 2.6rem;
+    font-weight: 300;
+    letter-spacing: -0.01em;
+    color: var(--text-head);
+    margin-bottom: 8px;
+  }
+
+  h1 em {
+    font-style: italic;
+    color: var(--gold);
+  }
+
+  .subtitle {
+    font-size: 1.05rem;
+    font-weight: 300;
+    color: var(--text-dim);
+    font-style: italic;
+  }
+
+  /* Canvas card */
+  .canvas-card {
+    background: var(--surface);
+    border: 1px solid var(--border2);
+    border-radius: 16px;
+    padding: 32px;
+    margin-bottom: 20px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .canvas-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(78,143,212,0.4), transparent);
+  }
+
+  #pompeu-canvas {
+    display: block;
+    width: 100%;
+    cursor: crosshair;
+    touch-action: none;
+    border-radius: 8px;
+  }
+
+  .drag-hint {
+    text-align: center;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--text-dim);
+    letter-spacing: 0.08em;
+    margin-top: 14px;
+  }
+
+  .drag-hint span {
+    display: inline-block;
+    padding: 4px 12px;
+    border: 1px solid var(--border2);
+    border-radius: 20px;
+    animation: pulse-hint 2.5s ease-in-out infinite;
+  }
+
+  @keyframes pulse-hint {
+    0%, 100% { opacity: 0.6; }
+    50% { opacity: 1; }
+  }
+
+  /* Metrics row */
+  .metrics {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+    margin-bottom: 12px;
+  }
+
+  .metric {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 14px 16px;
+    position: relative;
+    overflow: hidden;
+    transition: border-color 0.3s;
+  }
+
+  .metric.active { border-color: var(--border2); }
+
+  .metric-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    display: inline-block;
+    margin-right: 6px;
+    vertical-align: middle;
+  }
+
+  .metric-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--text-dim);
+    letter-spacing: 0.06em;
+    margin-bottom: 6px;
+    display: flex;
+    align-items: center;
+  }
+
+  .metric-value {
+    font-size: 1.6rem;
+    font-weight: 600;
+    color: var(--text-head);
+    letter-spacing: -0.02em;
+    line-height: 1;
+  }
+
+  .metric-unit {
+    font-size: 0.8rem;
+    font-weight: 300;
+    color: var(--text-dim);
+    margin-left: 4px;
+  }
+
+  /* Theorem check */
+  .theorem-result {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 16px 20px;
+    margin-bottom: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    transition: border-color 0.4s, background 0.4s;
+  }
+
+  .theorem-result.valid {
+    border-color: rgba(74,173,139,0.3);
+    background: linear-gradient(135deg, var(--surface) 0%, rgba(74,173,139,0.04) 100%);
+  }
+
+  .result-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--text-dim);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    flex-shrink: 0;
+  }
+
+  .result-equation {
+    font-size: 1.1rem;
+    font-style: italic;
+    color: var(--text-head);
+    flex: 1;
+    text-align: center;
+  }
+
+  .result-badge {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    padding: 4px 12px;
+    border-radius: 20px;
+    flex-shrink: 0;
+    transition: all 0.3s;
+  }
+
+  .result-badge.ok {
+    background: var(--green-dim);
+    color: var(--green);
+    border: 1px solid rgba(74,173,139,0.2);
+  }
+
+  .result-badge.pending {
+    background: rgba(107,115,133,0.12);
+    color: var(--text-dim);
+    border: 1px solid var(--border);
+  }
+
+  /* Theorem statement */
+  .theorem-box {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--gold);
+    border-radius: 0 12px 12px 0;
+    padding: 20px 24px;
+    margin-bottom: 20px;
+  }
+
+  .theorem-title {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--gold);
+    margin-bottom: 10px;
+  }
+
+  .theorem-text {
+    font-size: 1rem;
+    font-weight: 300;
+    line-height: 1.7;
+    color: var(--text);
+  }
+
+  .theorem-text strong {
+    font-weight: 600;
+    color: var(--text-head);
+  }
+
+  .formula {
+    display: block;
+    margin: 10px 0;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.85rem;
+    color: var(--gold);
+    padding: 10px 16px;
+    background: var(--gold-dim);
+    border-radius: 8px;
+    letter-spacing: 0.04em;
+  }
+
+  /* Legend */
+  .legend {
+    display: flex;
+    gap: 20px;
+    flex-wrap: wrap;
+    margin-bottom: 8px;
+  }
+
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.85rem;
+    color: var(--text-dim);
+  }
+
+  .legend-line {
+    width: 24px; height: 2px;
+    border-radius: 1px;
+    display: inline-block;
+  }
+
+  .legend-dot {
+    width: 10px; height: 10px;
+    border-radius: 50%;
+    display: inline-block;
+  }
+
+  /* Footer */
+  .footer {
+    text-align: center;
+    margin-top: 32px;
+    font-size: 0.8rem;
+    color: var(--text-dim);
+    font-style: italic;
+  }
+
+  @media (max-width: 500px) {
+    h1 { font-size: 1.9rem; }
+    .metrics { grid-template-columns: 1fr; }
+    .canvas-card { padding: 16px; }
+  }
+</style>
+</head>
+<body>
+<div class="wrapper">
+
+  <div class="header">
+    <div class="header-tag">Геометрия · Теорема</div>
+    <h1>Теорема <em>Помпею</em></h1>
+    <p class="subtitle">Правильные треугольники и их особенности</p>
+  </div>
+
+  <div class="canvas-card">
+    <canvas id="pompeu-canvas" width="716" height="440"></canvas>
+    <div class="drag-hint"><span>↖ перетащите синюю точку P по окружности</span></div>
+  </div>
+
+  <div class="metrics">
+    <div class="metric" id="m-pa">
+      <div class="metric-label">
+        <span class="metric-dot" style="background: var(--pa-color);"></span>
+        PA — до вершины A
+      </div>
+      <div class="metric-value" id="val-pa">—<span class="metric-unit">ед.</span></div>
+    </div>
+    <div class="metric" id="m-pb">
+      <div class="metric-label">
+        <span class="metric-dot" style="background: var(--pb-color);"></span>
+        PB — до вершины B
+      </div>
+      <div class="metric-value" id="val-pb">—<span class="metric-unit">ед.</span></div>
+    </div>
+    <div class="metric" id="m-pc">
+      <div class="metric-label">
+        <span class="metric-dot" style="background: var(--pc-color);"></span>
+        PC — до вершины C
+      </div>
+      <div class="metric-value" id="val-pc">—<span class="metric-unit">ед.</span></div>
+    </div>
+  </div>
+
+  <div class="theorem-result" id="theorem-result">
+    <span class="result-label">Проверка</span>
+    <span class="result-equation" id="result-eq">Переместите точку P</span>
+    <span class="result-badge pending" id="result-badge">Ожидание</span>
+  </div>
+
+  <div class="theorem-box">
+    <div class="theorem-title">Теорема Помпею (1936)</div>
+    <p class="theorem-text">
+      Для любой точки <strong>P</strong>, лежащей на описанной окружности правильного треугольника <strong>ABC</strong>,
+      одно из трёх расстояний PA, PB, PC равно сумме двух других.
+    </p>
+    <code class="formula">max(PA, PB, PC) = сумма двух меньших расстояний</code>
+    <p class="theorem-text">
+      Теорема является частным случаем тождества Птолемея для вписанных четырёхугольников.
+      Если точка P совпадает с вершиной треугольника — равенство вырождается тривиально.
+    </p>
+  </div>
+
+  <div class="legend">
+    <div class="legend-item">
+      <span class="legend-dot" style="background:#4aad8b; border: 2px solid #4aad8b;"></span> Правильный треугольник ABC
+    </div>
+    <div class="legend-item">
+      <span class="legend-dot" style="background:transparent; border: 2px dashed rgba(200,205,216,0.3);"></span> Описанная окружность
+    </div>
+    <div class="legend-item">
+      <span class="legend-dot" style="background:#4e8fd4;"></span> Точка P (перетащите)
+    </div>
+    <div class="legend-item">
+      <span class="legend-line" style="background:var(--pa-color);"></span> Расстояние PA
+    </div>
+    <div class="legend-item">
+      <span class="legend-line" style="background:var(--pb-color);"></span> Расстояние PB
+    </div>
+    <div class="legend-item">
+      <span class="legend-line" style="background:var(--pc-color);"></span> Расстояние PC
+    </div>
+  </div>
+
+  <div class="footer">
+    Интерактивная визуализация · Теорема Помпею · Тема 5
+  </div>
+
+</div>
+
+<script>
+const canvas = document.getElementById('pompeu-canvas');
+const ctx = canvas.getContext('2d');
+const W = 716, H = 440;
+canvas.width = W; canvas.height = H;
+
+const cx = 358, cy = 218, R = 168;
+let pAngle = Math.PI / 2 + 0.5;
+let dragging = false;
+let animFrame = null;
+
+const triAngles = [Math.PI/2, Math.PI/2 + 2*Math.PI/3, Math.PI/2 + 4*Math.PI/3];
+
+function vtx(a) {
+  return { x: cx + R * Math.cos(a), y: cy - R * Math.sin(a) };
+}
+function dist(p1, p2) {
+  return Math.sqrt((p1.x-p2.x)**2 + (p1.y-p2.y)**2);
+}
+
+const COLORS = {
+  bg:       '#0d0f14',
+  circle:   'rgba(200,205,216,0.18)',
+  tri:      '#4aad8b',
+  triF:     'rgba(74,173,139,0.06)',
+  p:        '#4e8fd4',
+  pGlow:    'rgba(78,143,212,0.2)',
+  pRing:    'rgba(78,143,212,0.08)',
+  pa:       '#e07660',
+  pb:       '#8b82d4',
+  pc:       '#c9a84c',
+  vLabel:   '#4aad8b',
+  textDim:  '#6b7385',
+  textMid:  '#9aa3b2',
+};
+
+function drawArrow(x1, y1, x2, y2, color, opacity = 0.7) {
+  ctx.save();
+  ctx.globalAlpha = opacity;
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 1.8;
+  ctx.setLineDash([6, 4]);
+  ctx.beginPath();
+  ctx.moveTo(x1, y1);
+  ctx.lineTo(x2, y2);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  const angle = Math.atan2(y2-y1, x2-x1);
+  const len = 9;
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.moveTo(x2, y2);
+  ctx.lineTo(x2 - len*Math.cos(angle-0.42), y2 - len*Math.sin(angle-0.42));
+  ctx.moveTo(x2, y2);
+  ctx.lineTo(x2 - len*Math.cos(angle+0.42), y2 - len*Math.sin(angle+0.42));
+  ctx.stroke();
+  ctx.restore();
+}
+
+function draw() {
+  ctx.clearRect(0, 0, W, H);
+
+  const A = vtx(triAngles[0]);
+  const B = vtx(triAngles[1]);
+  const Cv = vtx(triAngles[2]);
+  const P = vtx(pAngle);
+
+  // Outer glow ring
+  const grad = ctx.createRadialGradient(cx, cy, R-2, cx, cy, R+20);
+  grad.addColorStop(0, 'rgba(78,143,212,0.04)');
+  grad.addColorStop(1, 'transparent');
+  ctx.fillStyle = grad;
+  ctx.beginPath();
+  ctx.arc(cx, cy, R+20, 0, 2*Math.PI);
+  ctx.fill();
+
+  // Circle
+  ctx.save();
+  ctx.strokeStyle = COLORS.circle;
+  ctx.lineWidth = 1;
+  ctx.setLineDash([4, 6]);
+  ctx.beginPath();
+  ctx.arc(cx, cy, R, 0, 2*Math.PI);
+  ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.restore();
+
+  // Triangle fill
+  ctx.fillStyle = COLORS.triF;
+  ctx.beginPath();
+  ctx.moveTo(A.x, A.y);
+  ctx.lineTo(B.x, B.y);
+  ctx.lineTo(Cv.x, Cv.y);
+  ctx.closePath();
+  ctx.fill();
+
+  // Triangle edges
+  ctx.strokeStyle = COLORS.tri;
+  ctx.lineWidth = 1.5;
+  ctx.globalAlpha = 0.7;
+  ctx.beginPath();
+  ctx.moveTo(A.x, A.y);
+  ctx.lineTo(B.x, B.y);
+  ctx.lineTo(Cv.x, Cv.y);
+  ctx.closePath();
+  ctx.stroke();
+  ctx.globalAlpha = 1;
+
+  // Distances
+  const pa = dist(P, A), pb = dist(P, B), pc = dist(P, Cv);
+  const pairs = [[P, A, pa, COLORS.pa, 'PA'], [P, B, pb, COLORS.pb, 'PB'], [P, Cv, pc, COLORS.pc, 'PC']];
+  const maxV = Math.max(pa, pb, pc);
+
+  pairs.forEach(([p1, p2, d, color, name]) => {
+    const isBig = d === maxV;
+    drawArrow(p1.x, p1.y, p2.x, p2.y, color, isBig ? 0.9 : 0.55);
+
+    // midpoint label
+    const mx = (p1.x + p2.x) / 2;
+    const my = (p1.y + p2.y) / 2;
+    const dx = p2.x - p1.x, dy = p2.y - p1.y;
+    const len = Math.sqrt(dx*dx + dy*dy);
+    const nx = -dy/len * 18, ny = dx/len * 18;
+    const lx = mx + nx, ly = my + ny;
+
+    ctx.save();
+    ctx.font = `500 12px "JetBrains Mono", monospace`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = color;
+    ctx.globalAlpha = isBig ? 1 : 0.65;
+    ctx.fillText(d.toFixed(1), lx, ly);
+    ctx.restore();
+  });
+
+  // Vertex dots + labels
+  [[A, 'A'], [B, 'B'], [Cv, 'C']].forEach(([v, l]) => {
+    ctx.fillStyle = COLORS.tri;
+    ctx.globalAlpha = 0.9;
+    ctx.beginPath();
+    ctx.arc(v.x, v.y, 5, 0, 2*Math.PI);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+
+    const angle = Math.atan2(v.y - cy, v.x - cx);
+    const lx = v.x + Math.cos(angle) * 22;
+    const ly = v.y + Math.sin(angle) * 22;
+    ctx.font = `600 15px "Crimson Pro", serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = COLORS.vLabel;
+    ctx.fillText(l, lx, ly);
+  });
+
+  // P glow rings
+  ctx.fillStyle = COLORS.pRing;
+  ctx.beginPath();
+  ctx.arc(P.x, P.y, 26, 0, 2*Math.PI);
+  ctx.fill();
+  ctx.fillStyle = COLORS.pGlow;
+  ctx.beginPath();
+  ctx.arc(P.x, P.y, 16, 0, 2*Math.PI);
+  ctx.fill();
+
+  // P dot
+  ctx.fillStyle = COLORS.p;
+  ctx.beginPath();
+  ctx.arc(P.x, P.y, 7, 0, 2*Math.PI);
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(255,255,255,0.5)';
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+
+  // P label
+  const pa2 = Math.atan2(P.y - cy, P.x - cx);
+  const plx = P.x + Math.cos(pa2) * 20;
+  const ply = P.y + Math.sin(pa2) * 20;
+  ctx.font = `600 15px "Crimson Pro", serif`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = COLORS.p;
+  ctx.fillText('P', plx, ply);
+
+  // Update UI
+  const fmt = v => v.toFixed(2);
+  document.getElementById('val-pa').innerHTML = fmt(pa) + '<span class="metric-unit">ед.</span>';
+  document.getElementById('val-pb').innerHTML = fmt(pb) + '<span class="metric-unit">ед.</span>';
+  document.getElementById('val-pc').innerHTML = fmt(pc) + '<span class="metric-unit">ед.</span>';
+
+  const sorted = [pa, pb, pc].sort((a,b) => b-a);
+  const big = sorted[0], s1 = sorted[1], s2 = sorted[2];
+  const diff = Math.abs(big - (s1 + s2));
+
+  const bigName = pa >= pb && pa >= pc ? 'PA' : (pb >= pa && pb >= pc ? 'PB' : 'PC');
+  const otherNames = ['PA','PB','PC'].filter(n => n !== bigName);
+
+  const resEq = document.getElementById('result-eq');
+  const resBadge = document.getElementById('result-badge');
+  const resBox = document.getElementById('theorem-result');
+
+  if (diff < 3) {
+    resEq.textContent = `${bigName} = ${otherNames[0]} + ${otherNames[1]}   (${big.toFixed(1)} ≈ ${s1.toFixed(1)} + ${s2.toFixed(1)})`;
+    resBadge.textContent = '✓ Выполняется';
+    resBadge.className = 'result-badge ok';
+    resBox.className = 'theorem-result valid';
+  } else {
+    resEq.textContent = 'Переместите точку P на окружность';
+    resBadge.textContent = 'Ожидание';
+    resBadge.className = 'result-badge pending';
+    resBox.className = 'theorem-result';
+  }
+}
+
+function snapToCircle(x, y) {
+  return Math.atan2(-(y - cy), (x - cx));
+}
+
+function getXY(e) {
+  const rect = canvas.getBoundingClientRect();
+  const scaleX = W / rect.width;
+  const scaleY = H / rect.height;
+  const src = e.touches ? e.touches[0] : e;
+  return { x: (src.clientX - rect.left) * scaleX, y: (src.clientY - rect.top) * scaleY };
+}
+
+canvas.addEventListener('mousedown', e => {
+  const {x, y} = getXY(e);
+  const P = vtx(pAngle);
+  if (dist({x,y}, P) < 26) {
+    dragging = true;
+    if (animFrame) { cancelAnimationFrame(animFrame); animFrame = null; }
+    e.preventDefault();
+  }
+});
+canvas.addEventListener('mousemove', e => {
+  if (!dragging) return;
+  const {x, y} = getXY(e);
+  pAngle = snapToCircle(x, y);
+  draw();
+});
+window.addEventListener('mouseup', () => dragging = false);
+
+canvas.addEventListener('touchstart', e => {
+  const {x, y} = getXY(e);
+  const P = vtx(pAngle);
+  if (dist({x,y}, P) < 32) {
+    dragging = true;
+    if (animFrame) { cancelAnimationFrame(animFrame); animFrame = null; }
+    e.preventDefault();
+  }
+}, { passive: false });
+canvas.addEventListener('touchmove', e => {
+  if (!dragging) return;
+  e.preventDefault();
+  const {x, y} = getXY(e);
+  pAngle = snapToCircle(x, y);
+  draw();
+}, { passive: false });
+window.addEventListener('touchend', () => dragging = false);
+
+let animDir = 1, animAngle = Math.PI / 2 + 0.5;
+function autoAnimate() {
+  animAngle += 0.007 * animDir;
+  if (animAngle > Math.PI*2 + Math.PI/2 - 0.1) animDir = -1;
+  if (animAngle < Math.PI/2 + 0.15) animDir = 1;
+  pAngle = animAngle;
+  draw();
+  animFrame = requestAnimationFrame(autoAnimate);
+}
+autoAnimate();
+</script>
+</body>
+</html>
